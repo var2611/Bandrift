@@ -35,6 +35,8 @@ let time = 0;
 let unlisteners = [];
 let isServerLooping = false;
 let currentServerPort = 5201;
+let consecutiveShortSessions = 0;
+let sessionStartTime = 0;
 
 function initializeChart() {
     const ctx = speedChartCanvas.getContext('2d');
@@ -262,12 +264,26 @@ async function setupListeners() {
         
         // Handle Server Auto-Restart
         if (isServerLooping && event.payload.includes("Server")) {
-            addLog(`Restarting iperf server session on port ${currentServerPort}...`);
-            try {
-                await invoke('start_server', { port: currentServerPort });
-            } catch (err) {
-                addLog(`ERROR: Failed to restart server: ${err}`);
+            const sessionDuration = (Date.now() - sessionStartTime) / 1000;
+            
+            if (sessionDuration < 2) {
+                consecutiveShortSessions++;
+            } else {
+                consecutiveShortSessions = 0;
+            }
+
+            if (consecutiveShortSessions >= 3) {
+                addLog("ERROR: Server is crashing repeatedly. Breaking auto-restart loop.");
                 stopServerFlow();
+            } else {
+                addLog(`Restarting iperf server session on port ${currentServerPort}...`);
+                try {
+                    sessionStartTime = Date.now();
+                    await invoke('start_server', { port: currentServerPort });
+                } catch (err) {
+                    addLog(`ERROR: Failed to restart server: ${err}`);
+                    stopServerFlow();
+                }
             }
         } else {
             // Release client UI
@@ -305,6 +321,8 @@ startServerBtn.addEventListener('click', async () => {
     
     await setupListeners();
     try {
+        consecutiveShortSessions = 0;
+        sessionStartTime = Date.now();
         await invoke('start_server', { port: currentServerPort });
     } catch (error) {
         addLog(`ERROR: ${error}`);

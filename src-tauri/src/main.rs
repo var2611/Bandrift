@@ -44,10 +44,16 @@ async fn stop_test(state: State<'_, DbState>, mode: String) -> Result<(), String
     Ok(())
 }
 
+const IPERF_SIDECAR: &str = "iperf3";
+
+fn get_iperf_command() -> Result<Command, String> {
+    Command::new_sidecar(IPERF_SIDECAR)
+        .map_err(|e| format!("Failed to create iperf3 sidecar command: {}. Make sure iperf3 sidecars are in src-tauri/bin/", e))
+}
+
 #[command]
 async fn start_server(window: Window, state: State<'_, DbState>, port: u16) -> Result<(), String> {
-    let (mut rx, mut child) = Command::new_sidecar("iperf3")
-        .expect("failed to create `iperf3` binary command")
+    let (mut rx, mut child) = get_iperf_command()?
         .args(["-s", "-p", &port.to_string(), "-1", "--forceflush"])
         .spawn()
         .map_err(|e| format!("Failed to spawn iperf3 sidecar: {}", e))?;
@@ -124,8 +130,7 @@ async fn start_client(window: Window, state: State<'_, DbState>, options: Client
         args.push(interval.to_string());
     }
 
-    let (mut rx, mut child) = Command::new_sidecar("iperf3")
-        .expect("failed to create `iperf3` binary command")
+    let (mut rx, mut child) = get_iperf_command()?
         .args(args)
         .spawn()
         .map_err(|e| format!("Failed to spawn iperf3 sidecar: {}", e))?;
